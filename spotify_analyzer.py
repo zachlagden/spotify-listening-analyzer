@@ -27,7 +27,6 @@ This script requires the following libraries:
 - python-dotenv
 
 You can install the required libraries using pip:
-- pip install pandas spotipy tqdm python-dotenv
 - pip install -r requirements.txt
 
 Environment Setup:
