@@ -1183,6 +1183,18 @@ def main():
     print_section("Spotify Listening History Analyzer")
     print("Welcome! This tool will analyze your Spotify listening history in detail.\n")
 
+    # Check if .env file exists
+    if not os.path.exists(".env"):
+        print("⚠️ No .env file found in the current directory")
+        print("Please create a .env file with your Spotify API credentials")
+        print("Refer to the README for more information.")
+        if not confirm_continue(
+            "Would you like to continue without recent plays?\nPlease note that if you try to include recent plays, the analysis will fail."
+        ):
+            print("\n🛑 Analysis cancelled")
+            input()
+            return
+
     # Load environment configuration
     load_dotenv()
     print("✓ Loaded environment configuration")
@@ -1207,12 +1219,16 @@ def main():
             if not file_paths:
                 print(f"❌ No JSON files found in {dir_path}")
                 if not confirm_continue("Would you like to try a different directory?"):
+                    print("\n🛑 Analysis cancelled")
+                    input()
                     return
                 continue
             break
         except Exception as e:
             print(f"❌ Error accessing directory: {str(e)}")
             if not confirm_continue("Would you like to try again?"):
+                print("\n🛑 Analysis cancelled")
+                input()
                 return
 
     # Display found files
@@ -1223,6 +1239,7 @@ def main():
 
     if not confirm_continue("Would you like to proceed with the analysis?"):
         print("\n🛑 Analysis cancelled")
+        input()
         return
 
     # Get API credentials from environment
@@ -1237,6 +1254,7 @@ def main():
 
         if not confirm_continue("Continue without recent plays?"):
             print("\n🛑 Analysis cancelled")
+            input()
             return
 
     # Run analysis
@@ -1251,16 +1269,20 @@ def main():
             print(
                 "\n✨ Analysis complete! Thank you for using the Spotify History Analyzer. Please star the project on GitHub if you found it useful."
             )
+            input()
         else:
             print("\n🛑 Analysis cancelled")
+            input()
 
     except KeyboardInterrupt:
         print("\n\n🛑 Analysis cancelled by user")
+        input()
         sys.exit(0)
     except Exception as e:
         print(f"\n❌ An error occurred: {str(e)}")
         print("Please check your data files and try again.")
-        sys.exit(1)
+        input()
+        sys.exit(0)
 
 
 if __name__ == "__main__":
