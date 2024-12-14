@@ -1246,17 +1246,6 @@ def main():
     client_id = os.getenv("SPOTIFY_CLIENT_ID")
     client_secret = os.getenv("SPOTIFY_CLIENT_SECRET")
 
-    if not (client_id and client_secret):
-        print("\n⚠️ No Spotify API credentials found in .env file")
-        print("To include recent plays, create a .env file with:")
-        print("SPOTIFY_CLIENT_ID=your_client_id_here")
-        print("SPOTIFY_CLIENT_SECRET=your_client_secret_here")
-
-        if not confirm_continue("Continue without recent plays?"):
-            print("\n🛑 Analysis cancelled")
-            input()
-            return
-
     # Run analysis
     try:
         print("\n🚀 Initializing analysis...")
