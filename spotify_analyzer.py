@@ -456,12 +456,17 @@ class SpotifyAnalyzer:
             current_time = pd.Timestamp.now(tz="UTC")
             gap_days = (current_time - last_timestamp).days
 
+            if gap_days < 1:
+                gap_minutes = (current_time - last_timestamp).seconds // 60
+
             print("\n📊 Time Gap Analysis")
             print(f"Last entry in data: {last_timestamp:%Y-%m-%d %H:%M:%S %Z}")
             print(f"Current time: {current_time:%Y-%m-%d %H:%M:%S %Z}")
-            print(f"Gap to fill: {gap_days} days")
+            print(
+                f"Gap to fill: {str(gap_days) +' days' if gap_days > 0 else str(gap_minutes) + ' minutes'}"
+            )
 
-            if gap_days > 0:
+            if gap_days > 0 or gap_minutes > 0:
                 print("\nGap Filling Options:")
                 print("1. Fill entire gap")
                 print("2. Fill last month only")
