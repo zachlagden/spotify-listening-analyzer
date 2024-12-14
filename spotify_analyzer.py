@@ -51,6 +51,7 @@ import os
 import sys
 
 # Third-party library imports
+from datetime import datetime
 from dotenv import load_dotenv
 from spotipy.oauth2 import SpotifyOAuth
 from tqdm import tqdm
@@ -201,21 +202,35 @@ class SpotifyAnalyzer:
             "unique_artists": set(),
         }
 
-        with open(file_path, "r", encoding="utf-8") as file:
+        # Read file in binary mode for better performance
+        with open(file_path, "rb") as file:
             data = json.load(file)
 
         stats["entries"] = len(data)
 
-        # Calculate file statistics
-        timestamps = [pd.to_datetime(entry["ts"]) for entry in data]
-        stats["earliest_entry"] = min(timestamps)
-        stats["latest_entry"] = max(timestamps)
-        stats["unique_tracks"] = {
-            entry.get("master_metadata_track_name") for entry in data
-        }
-        stats["unique_artists"] = {
-            entry.get("master_metadata_album_artist_name") for entry in data
-        }
+        # Single pass through data to collect all stats
+        min_ts = float("inf")
+        max_ts = float("-inf")
+
+        for entry in data:
+            # Parse timestamp once and store as integer for faster comparison
+            ts = int(
+                datetime.fromisoformat(entry["ts"].replace("Z", "+00:00")).timestamp()
+            )
+            if ts < min_ts:
+                min_ts = ts
+            if ts > max_ts:
+                max_ts = ts
+
+            # Add to sets directly without get()
+            if track := entry.get("master_metadata_track_name"):
+                stats["unique_tracks"].add(track)
+            if artist := entry.get("master_metadata_album_artist_name"):
+                stats["unique_artists"].add(artist)
+
+        # Convert timestamps back to datetime objects at the end
+        stats["earliest_entry"] = datetime.fromtimestamp(min_ts)
+        stats["latest_entry"] = datetime.fromtimestamp(max_ts)
 
         return data, stats
 
