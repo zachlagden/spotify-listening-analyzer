@@ -767,7 +767,6 @@ class SpotifyAnalyzer:
             "🎸 Unique tracks": f"{self.df['master_metadata_track_name'].nunique():,}",
             "👥 Unique artists": f"{self.df['master_metadata_album_artist_name'].nunique():,}",
             "💿 Unique albums": f"{self.df['master_metadata_album_album_name'].nunique():,}",
-            "⌛ Average session length": f"{(self.df['duration_minutes'].mean()):.1f} minutes",
             "📅 Active listening days": f"{active_days} ({(active_days/days_covered)*100:.1f}% of period)",
             "🏁 Weekend vs Weekday ratio": f"{self.df[self.df['is_weekend']]['duration_hours'].sum() / self.df[~self.df['is_weekend']]['duration_hours'].sum():.2f}",
             "🌙 Night listening": f"{(len(self.df[self.df['time_of_day'] == 'Night']) / len(self.df) * 100):.1f}% of plays",
@@ -898,28 +897,37 @@ class SpotifyAnalyzer:
         - Album lifecycle information
         """
         if "album_stats" not in self.cache:
-            self.cache["album_stats"] = (
-                self.df.groupby(
-                    [
-                        "master_metadata_album_album_name",
-                        "master_metadata_album_artist_name",
-                    ],
-                    observed=False,
-                )
-                .agg(
-                    {
-                        "ms_played": ["sum", "mean", "count"],
-                        "master_metadata_track_name": ["count", "nunique"],
-                        "ts": ["min", "max"],
-                        "is_weekend": "mean",
-                        "time_of_day": lambda x: (
-                            x.mode().iloc[0]
-                            if not x.empty and len(x.mode()) > 0
-                            else "Various"
-                        ),
-                    }
-                )
-                .sort_values(("ms_played", "sum"), ascending=False)
+            # Group by album and artist, handling the time_of_day mode calculation separately
+            basic_stats = self.df.groupby(
+                [
+                    "master_metadata_album_album_name",
+                    "master_metadata_album_artist_name",
+                ],
+                observed=False,
+            ).agg(
+                {
+                    "ms_played": ["sum", "mean", "count"],
+                    "master_metadata_track_name": ["count", "nunique"],
+                    "ts": ["min", "max"],
+                    "is_weekend": "mean",
+                }
+            )
+
+            # Calculate mode of time_of_day separately
+            time_modes = self.df.groupby(
+                [
+                    "master_metadata_album_album_name",
+                    "master_metadata_album_artist_name",
+                ],
+                observed=False,
+            )["time_of_day"].agg(
+                lambda x: x.mode().iloc[0] if len(x.mode()) > 0 else "Various"
+            )
+
+            # Combine the stats
+            self.cache["album_stats"] = pd.concat([basic_stats, time_modes], axis=1)
+            self.cache["album_stats"].sort_values(
+                ("ms_played", "sum"), ascending=False, inplace=True
             )
 
         album_stats = self.cache["album_stats"]
@@ -1050,55 +1058,59 @@ class SpotifyAnalyzer:
         - Time preferences
         - Monthly trends
         """
-        print("\n📈 Advanced Listening Patterns")
-
-        # Calculate basic metrics
-        daily_listening = self.df.groupby(self.df["ts"].dt.date, observed=False)[
+        # Calculate daily listening time in minutes
+        daily_listening = self.df.groupby(self.df["ts"].dt.date)[
             "duration_minutes"
         ].sum()
-        consistency_score = (daily_listening > 0).mean() * 100
+        active_days = daily_listening[daily_listening > 0]
 
-        # Identify heavy and light listening days
-        heavy_listening_days = len(
-            daily_listening[
-                daily_listening > daily_listening.mean() + daily_listening.std()
-            ]
-        )
-        light_listening_days = len(
-            daily_listening[daily_listening > 0][
-                daily_listening < daily_listening.mean() - daily_listening.std()
-            ]
-        )
+        consistency_score = (len(active_days) / len(daily_listening)) * 100
 
         # Calculate unique artists per day
         unique_artists_per_day = self.df.groupby(self.df["ts"].dt.date)[
             "master_metadata_album_artist_name"
         ].nunique()
 
+        # Identify heavy and light listening days using active days only
+        mean_listening = active_days.mean()
+        std_listening = active_days.std()
+
+        heavy_listening_days = len(
+            active_days[active_days > mean_listening + std_listening]
+        )
+        light_listening_days = len(
+            active_days[active_days < mean_listening - std_listening]
+        )
+
         # Find heavily repeated tracks
         track_counts = self.df["master_metadata_track_name"].value_counts()
         heavily_repeated = track_counts[track_counts >= 10].count()
 
         # Calculate listening streaks
-        daily_listening = (
-            self.df.groupby(self.df["ts"].dt.date, observed=False)[
-                "duration_minutes"
-            ].sum()
-            > 0
-        )
-        current_streak = 0
+        daily_listening_bool = daily_listening > 0
+        dates = sorted(daily_listening_bool.index)
+
+        # Find longest streak
         max_streak = 0
-        current_count = 0
+        current_streak = 0
         max_streak_end_date = None
 
-        for date, listened in daily_listening.items():
-            if listened:
-                current_count += 1
-                if current_count > max_streak:
-                    max_streak = current_count
+        for i, date in enumerate(dates):
+            if daily_listening_bool[date]:
+                current_streak += 1
+                if current_streak > max_streak:
+                    max_streak = current_streak
                     max_streak_end_date = date
             else:
-                current_count = 0
+                current_streak = 0
+
+        # Calculate current streak
+        current_streak = 0
+        for date in reversed(dates):
+            if daily_listening_bool[date]:
+                current_streak += 1
+            else:
+                break
 
         # Format streak information
         if max_streak_end_date:
@@ -1112,44 +1124,37 @@ class SpotifyAnalyzer:
         else:
             streak_info = f"{max_streak} days"
 
-        # Calculate current streak
-        dates = sorted(daily_listening.index)
-        current_count = 0
-        for date in reversed(dates):
-            if daily_listening[date]:
-                current_count += 1
-            else:
-                break
-
         # Analyze time preferences
         time_preferences = self.df.groupby("time_of_day", observed=False).size()
         primary_time = time_preferences.idxmax()
         primary_time_percentage = (time_preferences.max() / len(self.df)) * 100
 
-        # Display metrics
+        # Print all metrics in a single, organized section
+        print("\n📈 Advanced Listening Patterns")
         print("\n📊 Listening Habits and Patterns")
+
         metrics = {
             "Daily Consistency": f"{consistency_score:.1f}% of days have activity",
             "Average Daily Artists": f"{unique_artists_per_day.mean():.1f}",
-            "Heavy Listening Days": f"{heavy_listening_days} ({heavy_listening_days/len(daily_listening)*100:.1f}% of active days)",
-            "Light Listening Days": f"{light_listening_days} ({light_listening_days/len(daily_listening)*100:.1f}% of active days)",
+            "Heavy Listening Days": f"{heavy_listening_days} ({heavy_listening_days/len(active_days)*100:.1f}% of active days)",
+            "Light Listening Days": f"{light_listening_days} ({light_listening_days/len(active_days)*100:.1f}% of active days)",
             "Frequently Repeated Tracks": f"{heavily_repeated:,} tracks played 10+ times",
-            "Daily Track Variety": f"{self.df.groupby(self.df['ts'].dt.date, observed=False)['master_metadata_track_name'].nunique().mean():.1f} unique tracks",
+            "Daily Track Variety": f"{self.df.groupby(self.df['ts'].dt.date)['master_metadata_track_name'].nunique().mean():.1f} unique tracks",
             "Longest Listening Streak": streak_info,
-            "Current Streak": f"{current_count} days",
+            "Current Streak": f"{current_streak} days",
             "Primary Listening Time": f"{primary_time} ({primary_time_percentage:.1f}% of plays)",
         }
 
         for metric, value in metrics.items():
             print(f"• {metric}: {value}")
 
-        # Daily statistics
+        # Daily statistics using active days only
         print("\n📈 Daily Listening Statistics")
         daily_stats = {
-            "Average listening time": f"{daily_listening.mean():.1f} minutes",
-            "Median listening time": f"{daily_listening.median():.1f} minutes",
-            "Most active day": f"{daily_listening.idxmax():%Y-%m-%d} ({daily_listening.max():.1f} minutes)",
-            "Standard deviation": f"{daily_listening.std():.1f} minutes",
+            "Average listening time": f"{active_days.mean():.1f} minutes",
+            "Median listening time": f"{active_days.median():.1f} minutes",
+            "Most active day": f"{active_days.idxmax():%Y-%m-%d} ({active_days.max():.1f} minutes)",
+            "Standard deviation": f"{active_days.std():.1f} minutes",
         }
 
         for stat, value in daily_stats.items():
@@ -1157,9 +1162,7 @@ class SpotifyAnalyzer:
 
         # Monthly trend analysis
         print("\n📅 Monthly Trend Analysis")
-        monthly_listening = self.df.groupby(["year", "month"], observed=False)[
-            "duration_hours"
-        ].sum()
+        monthly_listening = self.df.groupby(["year", "month"])["duration_hours"].sum()
         month_stats = {
             "Most active month": f"{monthly_listening.idxmax()[1]}/{monthly_listening.idxmax()[0]} ({monthly_listening.max():.1f} hours)",
             "Average monthly listening": f"{monthly_listening.mean():.1f} hours",
