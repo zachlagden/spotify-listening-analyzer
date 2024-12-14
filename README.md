@@ -44,7 +44,7 @@ pip install -r requirements.txt
 ### 1. Export Your Spotify Data
 
 1. Go to your [Spotify Account Privacy Settings](https://www.spotify.com/account/privacy/)
-2. Request your data export
+2. Request your data export (Extended streaming history)
 3. Wait for the email from Spotify (can take up to 30 days)
 4. Download and extract the JSON files
 
