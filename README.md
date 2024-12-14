@@ -27,7 +27,7 @@ SPOTIFY_CLIENT_ID=your_client_id_here
 SPOTIFY_CLIENT_SECRET=your_client_secret_here
 ```
 
-1. Double-click the executable to run the analyzer
+4. Double-click the executable to run the analyzer
 
 ### Option 2: Running from Source Code
 
