@@ -1183,21 +1183,10 @@ def main():
     print_section("Spotify Listening History Analyzer")
     print("Welcome! This tool will analyze your Spotify listening history in detail.\n")
 
-    # Check if .env file exists
-    if not os.path.exists(".env"):
-        print("⚠️ No .env file found in the current directory")
-        print("Please create a .env file with your Spotify API credentials")
-        print("Refer to the README for more information.")
-        if not confirm_continue(
-            "Would you like to continue without recent plays?\nPlease note that if you try to include recent plays, the analysis will fail."
-        ):
-            print("\n🛑 Analysis cancelled")
-            input()
-            return
-
     # Load environment configuration
-    load_dotenv()
-    print("✓ Loaded environment configuration")
+    if os.path.exists(".env"):
+        load_dotenv(override=True)
+        print("✓ Loaded environment configuration")
 
     # Get directory path from user
     while True:
@@ -1245,6 +1234,17 @@ def main():
     # Get API credentials from environment
     client_id = os.getenv("SPOTIFY_CLIENT_ID")
     client_secret = os.getenv("SPOTIFY_CLIENT_SECRET")
+
+    if not (client_id and client_secret):
+        print("\n⚠️ No Spotify API credentials found in .env file")
+        print("To include recent plays, create a .env file with:")
+        print("SPOTIFY_CLIENT_ID=your_client_id_here")
+        print("SPOTIFY_CLIENT_SECRET=your_client_secret_here")
+
+        if not confirm_continue("Continue without recent plays?"):
+            print("\n🛑 Analysis cancelled")
+            input()
+            return
 
     # Run analysis
     try:
